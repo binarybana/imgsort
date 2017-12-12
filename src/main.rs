@@ -52,11 +52,14 @@ fn sort_pixels(img: &mut image::DynamicImage, mode: &options::Mode)
     let bytes_per_pixel: usize = std::mem::size_of::<image::Rgba<u8>>();
     let mut v_from_raw = unsafe {
         let mut pixel_buf = img.to_rgba().into_raw();
+        println!("bytes: {}, length: {}, sizeof pixel_buf vec: {}", bytes_per_pixel, pixel_buf.len(), std::mem::size_of::<u8>() * pixel_buf.capacity() );
         Vec::from_raw_parts(pixel_buf.as_mut_ptr() as *mut image::Rgba<u8>,
                             pixel_buf.len()/bytes_per_pixel,
                             pixel_buf.capacity()/bytes_per_pixel)
     };
-    v_from_raw.sort_unstable_by_key(key_fn);
+    println!("length: {}, sizeof pixel_buf vec: {}", v_from_raw.len(), std::mem::size_of::<image::Rgba<u8>>() * v_from_raw.capacity() );
+    v_from_raw.sort_by_key(key_fn);
+    println!("length: {}, sizeof pixel_buf vec: {}", v_from_raw.len(), std::mem::size_of::<image::Rgba<u8>>() * v_from_raw.capacity() );
     // cast back to image::DynamicImage
     let sorted_pixels = unsafe {
         Vec::from_raw_parts(v_from_raw.as_mut_ptr() as *mut u8,
@@ -64,6 +67,7 @@ fn sort_pixels(img: &mut image::DynamicImage, mode: &options::Mode)
                             v_from_raw.capacity()*bytes_per_pixel)
     };
     std::mem::forget(v_from_raw);
+    println!("length: {}, sizeof pixel_buf vec: {}", sorted_pixels.len(), std::mem::size_of::<u8>() * sorted_pixels.capacity() );
     image::ImageBuffer::from_raw(img.width(), img.height(), sorted_pixels).expect("Could not create image after sorting")
 }
 
