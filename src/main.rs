@@ -34,7 +34,7 @@ fn get_format(path: &PathBuf) -> Result<image::ImageFormat, String> {
     }
 }
 
-fn sort_pixels(img: &image::DynamicImage, mode: &options::Mode)
+fn sort_pixels(img: &mut image::DynamicImage, mode: &options::Mode)
         -> image::RgbaImage {
     let key_fn = match *mode {
         options::Mode::Red => sorters::get_red,
@@ -46,24 +46,31 @@ fn sort_pixels(img: &image::DynamicImage, mode: &options::Mode)
         options::Mode::Lightness => sorters::get_lig,
     };
 
-    // Use RBGA for everything so YOLO
-    let mut buf = img.to_rgba();
+    use image::GenericImage;
 
-    let buf2 = buf.clone();
-    let mut sorted_pixels: Vec<_> = buf2.pixels().collect();
-    sorted_pixels.sort_by_key(key_fn);
-
-    for (i, pixel) in buf.pixels_mut().enumerate() {
-        *pixel = *sorted_pixels[i];
-    }
-
-    buf
+    // cast to sted::Vec<pixels> for sorting
+    let bytes_per_pixel: usize = std::mem::size_of::<image::Rgba<u8>>();
+    let mut v_from_raw = unsafe {
+        let mut pixel_buf = img.to_rgba().into_raw();
+        Vec::from_raw_parts(pixel_buf.as_mut_ptr() as *mut image::Rgba<u8>,
+                            pixel_buf.len()/bytes_per_pixel,
+                            pixel_buf.capacity()/bytes_per_pixel)
+    };
+    v_from_raw.sort_unstable_by_key(key_fn);
+    // cast back to image::DynamicImage
+    let sorted_pixels = unsafe {
+        Vec::from_raw_parts(v_from_raw.as_mut_ptr() as *mut u8,
+                            v_from_raw.len()*bytes_per_pixel,
+                            v_from_raw.capacity()*bytes_per_pixel)
+    };
+    std::mem::forget(v_from_raw);
+    image::ImageBuffer::from_raw(img.width(), img.height(), sorted_pixels).expect("Could not create image after sorting")
 }
 
 fn main() {
     let opts = options::parse(env::args_os().collect());
 
-    let img = match image::open(&opts.inpath) {
+    let mut img = match image::open(&opts.inpath) {
         Ok(f) => f,
         Err(err) => {
             eprintln!("{}", err);
@@ -71,7 +78,7 @@ fn main() {
         }
     };
 
-    let buf = sort_pixels(&img, &opts.mode);
+    let buf = sort_pixels(&mut img, &opts.mode);
 
     let format = match get_format(&opts.outpath) {
         Ok(f) => f,
